@@ -1,6 +1,8 @@
 #include "cilium/tls_wrapper.h"
 
 #include "cilium/network_policy.h"
+#include "cilium/svids.h"
+#include "cilium/bundles.h"
 #include "cilium/socket_option.h"
 #include "common/protobuf/utility.h"
 #include "envoy/api/v2/auth/cert.pb.h"
@@ -13,6 +15,8 @@ namespace Envoy {
 namespace Cilium {
 
 namespace {
+
+const std::string local_trust_domain("LOCAL");
 
 using SslSocketPtr =
     std::unique_ptr<Extensions::TransportSockets::Tls::SslSocket>;
@@ -41,24 +45,87 @@ class SslSocketWrapper : public Network::TransportSocket {
           option->ingress_, option->port_,
           option->ingress_ ? option->identity_ : option->destination_identity_);
       if (port_policy != nullptr) {
-        Envoy::Ssl::ContextSharedPtr ctx =
-            state_ == Extensions::TransportSockets::Tls::InitialState::Client
-                ? port_policy->getClientTlsContext()
-                : port_policy->getServerTlsContext();
+        if (!port_policy->isSpiffe()) {
+          Envoy::Ssl::ContextSharedPtr ctx =
+              state_ == Extensions::TransportSockets::Tls::InitialState::Client
+                  ? port_policy->getClientTlsContext()
+                  : port_policy->getServerTlsContext();
 
-	Envoy::Ssl::ContextConfig& config = 
-            state_ == Extensions::TransportSockets::Tls::InitialState::Client
-                ? port_policy->getClientTlsContextConfig()
-                : port_policy->getServerTlsContextConfig();
+    Envoy::Ssl::ContextConfig& config =
+              state_ == Extensions::TransportSockets::Tls::InitialState::Client
+                  ? port_policy->getClientTlsContextConfig()
+                  : port_policy->getServerTlsContextConfig();
 
-        if (ctx) {
-          // create the underlying SslSocket
-          ssl_socket_ =
-              std::make_unique<Extensions::TransportSockets::Tls::SslSocket>(
-                  std::move(ctx), state_, transport_socket_options_, config.createHandshaker());
+          if (ctx) {
+            // create the underlying SslSocket
+            ssl_socket_ =
+                std::make_unique<Extensions::TransportSockets::Tls::SslSocket>(
+                    std::move(ctx), state_, transport_socket_options_, config.createHandshaker());
 
-          // Set the callbacks
-          ssl_socket_->setTransportSocketCallbacks(callbacks);
+            // Set the callbacks
+            ssl_socket_->setTransportSocketCallbacks(callbacks);
+          }
+        } else {
+          uint32_t identity = option->ingress_ ? option->destination_identity_: option->identity_;
+          const std::string& id = option->svids_->getSpiffeID(identity);
+
+          if (id == std::string("")) {
+            ENVOY_LOG_MISC(trace, "connection from/to pod without spiffe ID assigned");
+            // TODO(Mauricio): What should actually happen here?
+            return;
+          }
+
+          ENVOY_LOG_MISC(trace, "connection {} {}", option->ingress_ ? "to" : "from", id);
+
+          const std::string& crt_bytes = option->svids_->getCrt(identity);
+          const std::string& key_bytes = option->svids_->getKey(identity);
+
+          envoy::extensions::transport_sockets::tls::v3::UpstreamTlsContext context_config;
+          auto tls_context = context_config.mutable_common_tls_context();
+
+          const std::string& trusted_ca_bytes = option->bundles_->getBundles(local_trust_domain);
+          if (trusted_ca_bytes == "") {
+            ENVOY_LOG_MISC(trace, "bundle for local trust domain not found");
+            // TODO(Mauricio): What should actually happen here?
+            return;
+          }
+
+          auto validation_context = tls_context->mutable_validation_context();
+          auto trusted_ca = validation_context->mutable_trusted_ca();
+
+          trusted_ca->set_inline_string(trusted_ca_bytes);
+
+          const auto& peerIDs = port_policy->getSpiffePeerIDs();
+          for (const auto& id : peerIDs) {
+              auto match = validation_context->add_match_subject_alt_names();
+              match->set_exact(id);
+          }
+
+          auto tls_certificate = tls_context->add_tls_certificates();
+          auto certificate_chain = tls_certificate->mutable_certificate_chain();
+          certificate_chain->set_inline_bytes(crt_bytes);
+
+          auto private_key = tls_certificate->mutable_private_key();
+          private_key->set_inline_bytes(key_bytes);
+
+          auto& contextfactory = option->svids_->getContext();
+
+          auto config = std::make_unique<
+                Extensions::TransportSockets::Tls::ClientContextConfigImpl>(
+                context_config, contextfactory);
+          auto ctx =
+                contextfactory.sslContextManager()
+                    .createSslClientContext(
+                        contextfactory.scope(),
+                        *config, nullptr);
+          if (ctx) {
+            // create the underlying SslSocket
+            ssl_socket_ =
+                std::make_unique<Extensions::TransportSockets::Tls::SslSocket>(
+                    std::move(ctx), state_, transport_socket_options_, config->createHandshaker());
+            // Set the callbacks
+            ssl_socket_->setTransportSocketCallbacks(callbacks);
+          }
         }
       }
     } else if (!option) {
