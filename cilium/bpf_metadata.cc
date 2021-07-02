@@ -15,6 +15,8 @@
 #include "envoy/registry/registry.h"
 #include "envoy/singleton/manager.h"
 
+#include "common/network/address_impl.h"
+
 namespace Envoy {
 namespace Server {
 namespace Configuration {
@@ -286,6 +288,30 @@ bool Config::getMetadata(Network::ConnectionSocket& socket) {
   socket.addOption(std::make_shared<Cilium::SocketOption>(
       policy, no_mark, source_identity, destination_identity, is_ingress_, dip->port(),
       std::move(pod_ip), src_address, svids_, bundles_));
+
+  auto port_policy = policy->findPortPolicy(is_ingress_, dip->port(),
+          is_ingress_ ? source_identity : destination_identity);
+  if (port_policy != nullptr && port_policy->getDstPort() != 0) {
+    // Translate destination port
+    auto localAddr = socket.addressProvider().localAddress();
+    if (localAddr->ip()) {
+      if (auto ipv4 = localAddr->ip()->ipv4()) {
+        struct sockaddr_in sock_addr = {
+          .sin_family = AF_INET,
+          .sin_port = htons(port_policy->getDstPort()),
+          .sin_addr = {
+            .s_addr = ipv4->address(),
+          },
+          .sin_zero = {0},
+        };
+
+        auto addr = std::make_shared<Envoy::Network::Address::Ipv4Instance>(&sock_addr);
+        socket.addressProvider().setLocalAddress(addr);
+      }
+      // TODO(Mauricio): support ipv6?
+    }
+  }
+
   return true;
 }
 
