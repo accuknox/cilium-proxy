@@ -39,6 +39,7 @@ class PortPolicy {
 
   virtual bool isSpiffe() const PURE;
   virtual std::vector<std::string> getSpiffePeerIDs() const PURE;
+  virtual uint16_t getDstPort() const PURE;
 };
 using PortPolicyConstSharedPtr = std::shared_ptr<const PortPolicy>;
 

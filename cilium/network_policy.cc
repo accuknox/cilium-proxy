@@ -222,7 +222,7 @@ class PolicyInstanceImpl : public PolicyInstance {
    public:
     PortNetworkPolicyRule(const NetworkPolicyMap& parent,
                           const cilium::PortNetworkPolicyRule& rule)
-        : name_(rule.name()), l7_proto_(rule.l7_proto()), is_spiffe_(false) {
+        : name_(rule.name()), l7_proto_(rule.l7_proto()), is_spiffe_(false), dst_port_(0) {
       for (const auto& remote : rule.remote_policies()) {
         ENVOY_LOG(
             trace,
@@ -232,6 +232,7 @@ class PolicyInstanceImpl : public PolicyInstance {
       }
       if (rule.has_downstream_tls_context()) {
         auto config = rule.downstream_tls_context();
+        dst_port_ = uint16_t(config.dstport());
         if (config.has_spiffe()) {
           processSpiffe(config.spiffe());
         } else{
@@ -280,6 +281,7 @@ class PolicyInstanceImpl : public PolicyInstance {
       }
       if (rule.has_upstream_tls_context()) {
         auto config = rule.upstream_tls_context();
+        dst_port_ = uint16_t(config.dstport());
         if (config.has_spiffe()) {
           processSpiffe(config.spiffe());
         } else {
@@ -450,6 +452,10 @@ class PolicyInstanceImpl : public PolicyInstance {
       return spiffe_peer_ids_;
     }
 
+    uint16_t getDstPort() const override {
+      return dst_port_;
+    }
+
     void processSpiffe(const ::cilium::Spiffe& spiffe) {
       is_spiffe_ = true;
       for (int i = 0; i < spiffe.peer_ids_size(); i++) {
@@ -476,6 +482,12 @@ class PolicyInstanceImpl : public PolicyInstance {
 
     bool is_spiffe_;
     std::vector<std::string> spiffe_peer_ids_;
+
+    // TODO(Mauricio): Currently this port is only used for the upstream
+    // connection. I'm not sure if there should be a second port for downstream
+    // connections as well, specially when there is a rule that terminates and
+    // originates TLS as in the TLS inspection use case.
+    uint16_t dst_port_;
   };
   using PortNetworkPolicyRuleConstSharedPtr =
       std::shared_ptr<const PortNetworkPolicyRule>;
