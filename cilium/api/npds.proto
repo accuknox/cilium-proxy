@@ -103,6 +103,9 @@ message TLSContext {
   repeated string server_names = 4;
 
   Spiffe spiffe = 5;
+
+  // Port to used as destination for upstream connections.
+  uint32 dstport = 6;
 }
 
 // A network policy rule, as a conjunction of predicates on L3/L7 flows.
