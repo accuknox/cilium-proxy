@@ -229,6 +229,70 @@ var _ interface {
 	ErrorName() string
 } = PortNetworkPolicyValidationError{}
 
+// Validate checks the field values on Spiffe with the rules defined in the
+// proto definition for this message. If any rules are violated, an error is returned.
+func (m *Spiffe) Validate() error {
+	if m == nil {
+		return nil
+	}
+
+	return nil
+}
+
+// SpiffeValidationError is the validation error returned by Spiffe.Validate if
+// the designated constraints aren't met.
+type SpiffeValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e SpiffeValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e SpiffeValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e SpiffeValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e SpiffeValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e SpiffeValidationError) ErrorName() string { return "SpiffeValidationError" }
+
+// Error satisfies the builtin error interface
+func (e SpiffeValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sSpiffe.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = SpiffeValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = SpiffeValidationError{}
+
 // Validate checks the field values on TLSContext with the rules defined in the
 // proto definition for this message. If any rules are violated, an error is returned.
 func (m *TLSContext) Validate() error {
@@ -241,6 +305,18 @@ func (m *TLSContext) Validate() error {
 	// no validation rules for CertificateChain
 
 	// no validation rules for PrivateKey
+
+	if v, ok := interface{}(m.GetSpiffe()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return TLSContextValidationError{
+				field:  "Spiffe",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	// no validation rules for Dstport
 
 	return nil
 }
