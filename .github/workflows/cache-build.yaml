@@ -2,7 +2,7 @@ name: Refresh test & build cache & build latest
 on:
   push:
     branches:
-      - master
+      - dev
 
 jobs:
   test-cache-refresh:
@@ -29,17 +29,17 @@ jobs:
           df -h
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-      - name: Login to quay.io
+      - name: Login to docker.io
         uses: docker/login-action@v1
         with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_ENVOY_USERNAME }}
-          password: ${{ secrets.QUAY_ENVOY_PASSWORD }}
+          registry: docker.io
+          username: ${{ secrets.DOCKER_ENVOY_USERNAME_DEV }}
+          password: ${{ secrets.DOCKER_ENVOY_USERNAME_DEV }}
       - name: Checkout PR
         uses: actions/checkout@v2
       - name: Pull proxylib/libcilium.so
         run: |
-          docker create -ti --name cilium-proxylib quay.io/cilium/cilium-ci:latest bash
+          docker create -ti --name cilium-proxylib docker.io/cilium/cilium-ci:latest bash
           docker cp -L cilium-proxylib:/usr/lib/libcilium.so proxylib/libcilium.so
           docker rm -fv cilium-proxylib
       - name: Prep for build
@@ -56,9 +56,9 @@ jobs:
           platforms: linux/amd64
           build-args: |
             COPY_CACHE_EXT=.new
-            BUILDER_IMAGE=quay.io/${{ github.repository_owner }}/cilium-envoy-builder:test-${{ env.ENVOY_VERSION }}-archive
+            BUILDER_IMAGE=quay.io/cilium/cilium-envoy-builder:test-${{ env.ENVOY_VERSION }}-archive
           push: true
-          tags: quay.io/${{ github.repository_owner }}/cilium-envoy-builder:test-${{ env.ENVOY_VERSION }}-archive-latest
+          tags: quay.io/cilium/cilium-envoy-builder:test-${{ env.ENVOY_VERSION }}-archive-latest
       - name: Cache Docker layers
         uses: actions/cache@v2
         with:
@@ -74,7 +74,7 @@ jobs:
           file: ./Dockerfile.tests
           platforms: linux/amd64
           build-args: |
-            BUILDER_IMAGE=quay.io/${{ github.repository_owner }}/cilium-envoy-builder:test-${{ env.ENVOY_VERSION }}-archive-latest
+            BUILDER_IMAGE=quay.io/cilium/cilium-envoy-builder:test-${{ env.ENVOY_VERSION }}-archive-latest
             BAZEL_BUILD_OPTS=--remote_upload_local_results=false
             TESTLOGS=bazel-out/k8-fastbuild/testlogs
           cache-to: type=local,dest=/tmp/buildx-cache,mode=max
@@ -98,12 +98,12 @@ jobs:
           df -h
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-      - name: Login to quay.io
+      - name: Login to docker.io
         uses: docker/login-action@v1
         with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_ENVOY_USERNAME }}
-          password: ${{ secrets.QUAY_ENVOY_PASSWORD }}
+          registry: docker.io
+          username: ${{ secrets.DOCKER_ENVOY_USERNAME_DEV }}
+          password: ${{ secrets.DOCKER_ENVOY_PASSWORD_DEV }}
       - name: Checkout PR
         uses: actions/checkout@v2
       - name: Prep for build
@@ -119,9 +119,9 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             COPY_CACHE_EXT=.new
-            BUILDER_IMAGE=quay.io/${{ github.repository_owner }}/cilium-envoy-builder:${{ env.ENVOY_VERSION }}-archive
+            BUILDER_IMAGE=quay.io/cilium/cilium-envoy-builder:${{ env.ENVOY_VERSION }}-archive
           push: true
-          tags: quay.io/${{ github.repository_owner }}/cilium-envoy-builder:${{ env.ENVOY_VERSION }}-archive-latest
+          tags: quay.io/cilium/cilium-envoy-builder:${{ env.ENVOY_VERSION }}-archive-latest
       - name: Cache Docker layers
         uses: actions/cache@v2
         with:
@@ -140,16 +140,16 @@ jobs:
           platforms: linux/amd64,linux/arm64
           build-args: |
             BAZEL_BUILD_OPTS=--remote_upload_local_results=false
-            BUILDER_IMAGE=quay.io/${{ github.repository_owner }}/cilium-envoy-builder:${{ env.ENVOY_VERSION }}-archive-latest
+            BUILDER_IMAGE=quay.io/cilium/cilium-envoy-builder:${{ env.ENVOY_VERSION }}-archive-latest
           cache-to: type=local,dest=/tmp/buildx-cache,mode=max
           push: true
           tags: |
-            quay.io/${{ github.repository_owner }}/cilium-envoy:latest
-            quay.io/${{ github.repository_owner }}/cilium-envoy:${{ github.sha }}
+            docker.io/accuknox/cilium-envoy:latest
+            docker.io/accuknox/cilium-envoy:${{ github.sha }}
       - name: Envoy binary version check
         shell: bash
         run: |
-          docker create -ti --name cilium-envoy quay.io/${{ github.repository_owner }}/cilium-envoy:${{ github.sha }} bash
+          docker create -ti --name cilium-envoy docker.io/accuknox/cilium-envoy:${{ github.sha }} bash
           docker cp cilium-envoy:/usr/bin/cilium-envoy ./cilium-envoy
           docker rm -fv cilium-envoy
           envoy_version=$(./cilium-envoy --version)
@@ -159,4 +159,4 @@ jobs:
         shell: bash
         run: |
           echo "Digests:"
-          echo "quay.io/${{ github.repository_owner }}/cilium-envoy:${{ github.sha }}@${{ steps.docker_build_cd.outputs.digest }}"
+          echo "docker.io/accuknox/cilium-envoy:${{ github.sha }}@${{ steps.docker_build_cd.outputs.digest }}"
