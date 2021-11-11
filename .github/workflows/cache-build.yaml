@@ -34,7 +34,7 @@ jobs:
         with:
           registry: docker.io
           username: ${{ secrets.DOCKER_ENVOY_USERNAME_DEV }}
-          password: ${{ secrets.DOCKER_ENVOY_USERNAME_DEV }}
+          password: ${{ secrets.DOCKER_ENVOY_PASSWORD_DEV }}
       - name: Checkout PR
         uses: actions/checkout@v2
       - name: Pull proxylib/libcilium.so
