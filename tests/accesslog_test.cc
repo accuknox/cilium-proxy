@@ -32,7 +32,7 @@ TEST_F(CiliumTest, AccessLog) {
   Network::Socket::OptionsSharedPtr options =
       std::make_shared<Network::Socket::Options>();
   auto option = std::make_shared<Cilium::SocketOption>(
-      nullptr, false, 1, 173, true, 80, "1.2.3.4", nullptr);
+      nullptr, false, 1, 173, true, 80, "1.2.3.4", nullptr, nullptr, nullptr);
   options->push_back(option);
 
   connection.stream_info_.downstream_address_provider_->setLocalAddress(
@@ -42,7 +42,7 @@ TEST_F(CiliumTest, AccessLog) {
 
   AccessLog::Entry log;
 
-  log.InitFromRequest("1.2.3.4", *option, connection.stream_info_, headers);
+  log.InitFromRequest("1.2.3.4", *option, connection.stream_info_, headers, true, 0);
 
   EXPECT_EQ(log.entry_.is_ingress(), true);
   EXPECT_EQ(log.entry_.entry_type(), ::cilium::EntryType::Request);
