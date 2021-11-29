@@ -478,10 +478,22 @@ class PolicyInstanceImpl : public PolicyInstance {
       return dst_port_;
     }
 
+    std::string findReplace(std::string str, const std::string& search,
+                                  const std::string& replace) {
+      size_t pos = 0;
+      while ((pos = str.find(search, pos)) != std::string::npos) {
+        str.replace(pos, search.length(), replace);
+        pos += replace.length();
+      }
+
+      return str;
+    }
+
     void processSpiffe(const ::cilium::Spiffe& spiffe) {
       is_spiffe_ = true;
       for (int i = 0; i < spiffe.peer_ids_size(); i++) {
-        spiffe_peer_ids_.push_back(spiffe.peer_ids(i));
+        std::string spiffeIDRegex = findReplace(spiffe.peer_ids(i), "*", ".+");
+        spiffe_peer_ids_.push_back(spiffeIDRegex);
       }
     }
 

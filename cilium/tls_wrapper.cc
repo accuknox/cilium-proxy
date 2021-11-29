@@ -98,7 +98,8 @@ class SslSocketWrapper : public Network::TransportSocket {
           const auto& peerIDs = port_policy->getSpiffePeerIDs();
           for (const auto& id : peerIDs) {
               auto match = validation_context->add_match_subject_alt_names();
-              match->set_exact(id);
+              match->mutable_safe_regex()->mutable_google_re2();
+              match->mutable_safe_regex()->set_regex(id);
           }
 
           auto tls_certificate = tls_context->add_tls_certificates();
